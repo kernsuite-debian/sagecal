@@ -1,0 +1,15 @@
+Description: fix for 32bit
+
+--- sagecal-0.2+20150820.orig/src/lib/Makefile
++++ sagecal-0.2+20150820/src/lib/Makefile
+@@ -11,8 +11,8 @@ INCLUDES= -I.
+ LIBPATH=
+ 
+ #### glib
+-GLIBI=-I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include -I/usr/lib/x86_64-linux-gnu/glib-2.0/include/
+-GLIBL=-lglib-2.0
++GLIBI=`pkg-config --cflags glib-2.0`
++GLIBL=`pkg-config --libs glib-2.0`
+ 
+ OBJECTS=readsky.o dataio.o predict.o lmfit_nocuda.o clmfit_nocuda.o lbfgs_nocuda.o myblas.o residual.o robustlm.o updatenu.o robust_lbfgs_nocuda.o rtr_solve.o  rtr_solve_robust.o manifold_average.o consensus_poly.o rtr_solve_robust_admm.o admm_solve.o
+ 

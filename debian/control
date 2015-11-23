@@ -1,0 +1,14 @@
+Source: sagecal
+Section: science
+Priority: extra
+Maintainer: Gijs Molenaar <gijs@pythonic.nl>
+Build-Depends: debhelper (>= 8.0.0), liblapack-dev, libcasacore2-dev,
+ libglib2.0-dev, gfortran, libcfitsio3-dev, libopenblas-dev, quilt, g++, gcc
+Standards-Version: 3.9.2
+Homepage: https://sourceforge.net/projects/sagecal/
+
+Package: sagecal
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: very fast, memory efficient and GPU accelerated radio interferometric calibration program
+ SAGECal is a very fast, memory efficient and GPU accelerated radio interferometric calibration program. It can handle all source models including points, Gaussians and Shapelets. It can calibrate along hundreds of directions without running out of memory in almost real time. Intel Xeon Phi acceleration is also available.

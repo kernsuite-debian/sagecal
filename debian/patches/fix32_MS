@@ -1,0 +1,15 @@
+Description: fix 32 bit build
+
+--- sagecal-0.2+20150820.orig/src/MS/Makefile
++++ sagecal-0.2+20150820/src/MS/Makefile
+@@ -18,8 +18,8 @@ INCLUDES=-I. -I./lib -I$(CASA_INCDIR) -I
+ LIBPATH=-L$(LAPACK_DIR) -L$(CASA_LIBDIR)  -L./lib
+ 
+ #### glib
+-GLIBI=-I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include -I/usr/lib/x86_64-linux-gnu/glib-2.0/include/
+-GLIBL=-lglib-2.0
++GLIBI=`pkg-config --cflags glib-2.0`
++GLIBL=`pkg-config --libs glib-2.0`
+ 
+ 
+ OBJECTS=main.o data.o

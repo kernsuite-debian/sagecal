@@ -1,0 +1,53 @@
+sagecal (0.2+20150820-2trusty) trusty; urgency=medium
+
+  * fix 32 bit build
+
+ -- Gijs Molenaar (launchpad ppa build key) <gijs@pythonic.nl>  Mon, 23 Nov 2015 10:40:05 +0000
+
+sagecal (0.2+20150820-1trusty) trusty; urgency=medium
+
+  * new unversioned upstream version
+
+ -- Gijs Molenaar (launchpad ppa build key) <gijs@pythonic.nl>  Fri, 09 Oct 2015 15:06:43 +0200
+
+sagecal (0.1-3trusty) trusty; urgency=medium
+
+  * upload to new PPA
+
+ -- Gijs Molenaar (launchpad ppa build key) <gijs@pythonic.nl>  Mon, 26 Jan 2015 14:38:42 +0200
+
+sagecal (0.1-2trusty) trusty; urgency=low
+
+  * switch to gcc and g++ 4.6
+
+ -- Gijs Molenaar <gijs@pythonic.nl>  Mon, 07 Apr 2014 14:37:29 +0200
+
+sagecal (0.1-1trusty) trusty; urgency=low
+
+  * build for trusty
+
+ -- Gijs Molenaar <gijs@pythonic.nl>  Fri, 04 Apr 2014 14:22:28 +0200
+
+sagecal (0.1-4precise1) precise; urgency=low
+
+  * fix patch mistake
+
+ -- Gijs Molenaar <gijs@pythonic.nl>  Mon, 24 Mar 2014 17:10:27 +0200
+
+sagecal (0.1-3precise1) precise; urgency=low
+
+  * more pkg-config
+
+ -- Gijs Molenaar <gijs@pythonic.nl>  Mon, 24 Mar 2014 15:33:30 +0200
+
+sagecal (0.1-2precise1) precise; urgency=low
+
+  * fix 32bit build by using pkg-config
+
+ -- Gijs Molenaar <gijs@pythonic.nl>  Mon, 24 Mar 2014 13:07:26 +0000
+
+sagecal (0.1-1precise1) precise; urgency=low
+
+  * Initial release
+
+ -- Gijs Molenaar <gijs@pythonic.nl>  Mon, 24 Mar 2014 11:19:24 +0000

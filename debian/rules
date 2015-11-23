@@ -1,0 +1,19 @@
+#!/usr/bin/make -f
+# -*- makefile -*-
+#
+# Uncomment this to turn on verbose mode.
+#export DH_VERBOSE=1
+
+
+%:
+	dh $@ --parallel  --sourcedirectory=src
+
+override_dh_auto_build:
+	dh_auto_build 
+	cd src/lib && make 
+	cd src/MS && make
+
+override_dh_auto_clean:
+	dh_auto_clean
+	cd src/lib && rm -rf *.o *.a
+	cd src/MS && rm -rf *.o sagecal
