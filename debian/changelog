@@ -1,3 +1,9 @@
+sagecal (0.2+20170130-1) xenial; urgency=medium
+
+  * sync with upstream
+
+ -- Gijs Molenaar (launchpad ppa build key) <gijs@pythonic.nl>  Fri, 03 Feb 2017 09:25:59 +0000
+
 sagecal (0.2+20150820-2trusty) trusty; urgency=medium
 
   * fix 32 bit build
