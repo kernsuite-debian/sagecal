@@ -6,9 +6,9 @@ Warning: this file may be obsolete. use sagecal -h to see up-to-date options.
 
 Step by Step Introduction:
 #######################################################################
-1)Calibrate data in the standard way using BBS/CASA or anything else. 
+1a)Calibrate data in the standard way using BBS/CASA or anything else. 
 Use NDPP to average the data in your MS to a few channels (also average in time to about 10sec). Also flag any spikes in the data.
-
+1b)For subtraction of the ATeam from raw data (CasA,CygA,...), no initial calibration is necessary. Just run sagecal on raw data, but it is better to scale the sky model to match the apparent flux of the sources that are being subtracted.
 #######################################################################
 2) Sky Model:
 3a)Make an image of your MS (using ExCon/casapy). 
@@ -40,7 +40,8 @@ e.g.
 P1C1 0 12 42.996 85 43 21.514 0.030498 0 0 0 -5.713060 0 0 0 0 115039062.0
 P5C1 1 18 5.864 85 58 39.755 0.041839 0 0 0 -6.672879 0 0 0 0 115039062.0
 # A Gaussian mjor,minor 0.1375,0.0917 deg diameter -> radius(rad), PA 43.4772 deg (-> rad)
-# PA: N-> angle, clockwise, NOTE BDSM angle is N-> counterclockwise
+# Position Angle: "West from North (counter-clockwise)" (0 deg = North, 90 deg = West). 
+# Note: PyBDSM and BBS use "North from East (counter-clockwise)" (0 deg = East, 90 deg = North). 
 G0  5 34 31.75 22 00 52.86 100 0 0 0 0.00 0 0.0012  0.0008 -2.329615801 130.0e6
 # A Disk radius=0.041 deg
 D01 23 23 25.67 58 48 58 80 0 0 0 0 0 0.000715 0.000715 0 130e6
@@ -109,3 +110,21 @@ mslist : text file with 10 MS names that are used by the 10 slaves
 -r 5 : regularization factor is 5.0
 
 The rest of the options are similar to sagecal.
+
+
+
+
+##########################################################################
+5)Solution format
+All SAGECal solutions are stored as text files. Lines starting with '#' are comments.
+The first non-comment line includes some general information, i.e.
+freq(MHz) bandwidth(MHz) time_interval(min) stations clusters effective_clusters
+
+The remaining lines contain solutions for each cluster as a single column, the first column is just a counter. 
+Let's say there are K effective clusters and N directions. Then there will be K+1 columns, the first column will start from 0 and increase to 8N-1, 
+which can be used to count the row number. It will keep repeating this, for each time interval.
+The rows 0 to 7 belong to the solutions for the 1st station. The rows 8 to 15 for the 2nd station and so on. 
+Each 8 rows of any given column represent the 8 values of a 2x2 Jones matrix. Lets say these are S0,S1,S2,S3,S4,S5,S6 and S7. Then the Jones matrix is [S0+j*S1, S4+j*S5; S2+j*S3, S6+j*S7] (the ';' denotes the 1st row of the 2x2 matrix).
+
+When a luster has a chunk size > 1, there will be more than 1 solution per given time interval. 
+So for this cluster, there will be more than 1 column in the solution file, the exact number of columns being equal to the chunk size.
