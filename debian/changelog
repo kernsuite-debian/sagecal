@@ -1,3 +1,10 @@
+sagecal (0.2+20171103-1kern1) xenial; urgency=medium
+
+  * make debian files mit
+  * Imported Upstream version 0.2+20171103
+
+ -- KERN packaging <packaging@kernsuite.info>  Tue, 07 Nov 2017 16:46:38 +0200
+
 sagecal (0.2+20170130-1) xenial; urgency=medium
 
   * sync with upstream
