@@ -1,3 +1,10 @@
+sagecal (0.2+20171103-1kern2) bionic; urgency=medium
+
+  * modernize and cleanup package
+  * build for bionic 
+
+ -- KERN packaging <packaging@kernsuite.info>  Fri, 04 May 2018 13:27:18 +0200
+
 sagecal (0.2+20171103-1kern1) xenial; urgency=medium
 
   * make debian files mit
