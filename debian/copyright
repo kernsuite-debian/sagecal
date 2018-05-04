@@ -1,9 +1,9 @@
 Format: http://dep.debian.net/deps/dep5
 Upstream-Name: sagecal
-Source: <url://example.com>
+Source: https://sourceforge.net/projects/sagecal/
 
 Files: *
-Copyright: <years> <put author's name and email here>
+Copyright: 2018 Sarod Yatawatta
 License: GPL-2.0+
 
 Files: debian/*
