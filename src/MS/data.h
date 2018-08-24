@@ -22,22 +22,22 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <iostream>
-#include <ms/MeasurementSets/MSIter.h>
-#include <tables/Tables/Table.h>
-#include <tables/Tables/TableVector.h>
-#include <tables/Tables/TableRecord.h>
-#include <tables/Tables/TableColumn.h>
-#include <tables/Tables/TableIter.h>
-#include <tables/Tables/ScalarColumn.h>
-#include <tables/Tables/ArrayColumn.h>
-#include <casa/Arrays/Array.h>
-#include <casa/Arrays/Cube.h>
+#include <casacore/ms/MeasurementSets/MSIter.h>
+#include <casacore/tables/Tables/Table.h>
+#include <casacore/tables/Tables/TableVector.h>
+#include <casacore/tables/Tables/TableRecord.h>
+#include <casacore/tables/Tables/TableColumn.h>
+#include <casacore/tables/Tables/TableIter.h>
+#include <casacore/tables/Tables/ScalarColumn.h>
+#include <casacore/tables/Tables/ArrayColumn.h>
+#include <casacore/casa/Arrays/Array.h>
+#include <casacore/casa/Arrays/Cube.h>
 #include <fstream>
 #include <math.h>
 #include <complex>
 
 
-using namespace casa;
+using namespace casacore;
 
 namespace Data
 {
@@ -121,8 +121,8 @@ namespace Data
     extern float min_uvcut;
     extern float max_uvcut;
     extern float max_uvtaper;
-    extern casa::String DataField; /* input column DATA/CORRECTED_DATA */
-    extern casa::String OutField; /* output column DATA/CORRECTED_DATA */
+    extern casacore::String DataField; /* input column DATA/CORRECTED_DATA */
+    extern casacore::String OutField; /* output column DATA/CORRECTED_DATA */
     extern int TileSize; //Tile size
     extern int Nt; /* no of worker threads */
     extern char *SkyModel; /* sky model file */
@@ -164,5 +164,11 @@ namespace Data
     extern int Nskip;
     extern int verbose; /* if >0, enable verbose output */
     extern int mdl; /* if given, calculate AIC/MDL for different poly configs and find minimum */
+    extern int GPUpredict; /* if given, use GPU for model calculation */
+    extern int heapsize; /* heap size in GPU (MB), for using malloc() */
+    /* for client server mode */
+    extern int servermode; /* 0: client, 1: server, else default operation */
+    extern char *servername; /* server host name or ip address */
+    extern char *portnumber; /* which port number to use for communication */
 }
 #endif //__DATA_H__
