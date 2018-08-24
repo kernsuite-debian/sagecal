@@ -23,8 +23,11 @@
 #include <stdio.h>
 #include <string.h>
 #include <pthread.h>
+#include <casacore/casa/Quanta/Quantum.h>
 
-#include<sagecal.h>
+#include <Radio.h>
+#include <Dirac.h>
+
 #ifndef LMCUT
 #define LMCUT 40
 #endif
@@ -35,7 +38,7 @@ using namespace Data;
 
 void
 print_copyright(void) {
-  cout<<"SAGECal 0.4.7 (C) 2011-2017 Sarod Yatawatta"<<endl;
+  cout<<"SAGECal 0.5.1 (C) 2011-2018 Sarod Yatawatta"<<endl;
 }
 
 
@@ -59,10 +62,13 @@ print_help(void) {
    cout << "-m LBFGS memory size : default " <<Data::lbfgs_m<< endl;
    cout << "-n no of worker threads : default "<<Data::Nt << endl;
    cout << "-t tile size : default " <<Data::TileSize<< endl;
-   cout << "-a 0,1,2,3 : if "<<SIMUL_ONLY<<", only simulate, if "<<SIMUL_ADD<<", simulate and add to input, if "<<SIMUL_SUB<<", simulate and subtract from input (multiplied by solutions if solutions file is also given): default " <<Data::DoSim<< endl;
+   cout << "-a 0,1,2,3 : if "<<SIMUL_ONLY<<", only simulate, if "<<SIMUL_ADD<<", simulate and add to input, if "<<SIMUL_SUB<<", simulate and subtract from input (For a>0, multiplied by solutions if solutions file is also given): default " <<Data::DoSim<< endl;
    cout << "-z ignore_clusters: if only doing a simulation, ignore the cluster ids listed in this file" << endl;
    cout << "-b 0,1 : if 1, solve for each channel: default " <<Data::doChan<< endl;
    cout << "-B 0,1 : if 1, predict array beam: default " <<Data::doBeam<< endl;
+#ifdef HAVE_CUDA
+   cout << "-E 0,1 : if 1, use GPU for model computing: default " <<Data::GPUpredict<< endl;
+#endif
    cout << "-x exclude baselines length (lambda) lower than this in calibration : default "<<Data::min_uvcut << endl;
    cout << "-y exclude baselines length (lambda) higher than this in calibration : default "<<Data::max_uvcut << endl;
    cout <<endl<<"Advanced options:"<<endl;
@@ -74,6 +80,9 @@ print_help(void) {
    cout << "-H robust nu, upper bound: default "<<Data::nuhigh<< endl;
    cout << "-W pre-whiten data: default "<<Data::whiten<< endl;
    cout << "-R randomize iterations: default "<<Data::randomize<< endl;
+#ifdef HAVE_CUDA
+   cout << "-S GPU heap size (MB): default "<<Data::heapsize<< endl;
+#endif
    cout << "-D 0,1,2 : if >0, enable diagnostics (Jacobian Leverage) 1 replace Jacobian Leverage as output, 2 only fractional noise/leverage is printed: default " <<Data::DoDiag<< endl;
    cout << "-q solutions.txt: if given, initialize solutions by reading this file (need to have the same format as a solution file, only solutions for 1 timeslot needed)"<< endl;
    cout <<"Report bugs to <sarod@users.sf.net>"<<endl;
@@ -89,7 +98,7 @@ ParseCmdLine(int ac, char **av) {
         print_help();
         exit(0);
     }
-    while((c=getopt(ac, av, "a:b:c:d:e:f:g:j:k:l:m:n:o:p:q:s:t:x:y:z:B:D:F:I:J:O:L:H:R:W:h"))!= -1)
+    while((c=getopt(ac, av, "a:b:c:d:e:f:g:j:k:l:m:n:o:p:q:s:t:x:y:z:B:D:E:F:I:J:O:L:H:R:S:W:E:h"))!= -1)
     {
         switch(c)
         {
@@ -125,6 +134,9 @@ ParseCmdLine(int ac, char **av) {
             case 'B':
                 doBeam= atoi(optarg);
                 if (doBeam>1) { doBeam=1; }
+                break;
+            case 'E':
+                GPUpredict=atoi(optarg);
                 break;
             case 'F':
                 format= atoi(optarg);
@@ -175,6 +187,11 @@ ParseCmdLine(int ac, char **av) {
             case 'J': 
                 phaseOnly= atoi(optarg);
                 break;
+#ifdef HAVE_CUDA
+            case 'S':
+                heapsize= atoi(optarg);
+                break;
+#endif
             case 'x': 
                 Data::min_uvcut= atof(optarg);
                 break;
@@ -217,7 +234,6 @@ ParseCmdLine(int ac, char **av) {
      cout<<"Only doing simulation (with possible correction for cluster id "<<ccid<<")."<<endl;
     }
 }
-
 
 int 
 main(int argc, char **argv) {
@@ -462,6 +478,16 @@ main(int argc, char **argv) {
 
     double inv_c=1.0/CONST_C;
 
+#ifdef HAVE_CUDA
+   /* setup Heap of GPU,  only need to be done once, before any kernel is launched  */
+    if (GPUpredict>0) {
+     for (int gpuid=0; gpuid<=MAX_GPU_ID; gpuid++) {
+        cudaSetDevice(gpuid);
+        cudaDeviceSetLimit(cudaLimitMallocHeapSize, Data::heapsize*1024*1024);
+     }
+    }
+#endif
+
     while (msitr[0]->more()) {
       start_time = time(0);
       if (iodata.Nms==1) {
@@ -523,18 +549,27 @@ main(int argc, char **argv) {
    /* FIXME: uvmin is not needed in calibration, because its taken care of by flags */
     if (!Data::DoSim) {
     /****************** calibration **************************/
-////#ifndef HAVE_CUDA
+#ifndef HAVE_CUDA
     if (!doBeam) {
      precalculate_coherencies(iodata.u,iodata.v,iodata.w,coh,iodata.N,iodata.Nbase*iodata.tilesz,barr,carr,M,iodata.freq0,iodata.deltaf,iodata.deltat,iodata.dec0,Data::min_uvcut,Data::max_uvcut,Data::Nt);
     } else {
      precalculate_coherencies_withbeam(iodata.u,iodata.v,iodata.w,coh,iodata.N,iodata.Nbase*iodata.tilesz,barr,carr,M,iodata.freq0,iodata.deltaf,iodata.deltat,iodata.dec0,Data::min_uvcut,Data::max_uvcut,
   beam.p_ra0,beam.p_dec0,iodata.freq0,beam.sx,beam.sy,beam.time_utc,iodata.tilesz,beam.Nelem,beam.xx,beam.yy,beam.zz,Data::Nt);
     }
-////#endif
-////#ifdef HAVE_CUDA
-////     precalculate_coherencies_withbeam_gpu(iodata.u,iodata.v,iodata.w,coh,iodata.N,iodata.Nbase*iodata.tilesz,barr,carr,M,iodata.freq0,iodata.deltaf,iodata.deltat,iodata.dec0,Data::min_uvcut,Data::max_uvcut,
-////  beam.p_ra0,beam.p_dec0,iodata.freq0,beam.sx,beam.sy,beam.time_utc,iodata.tilesz,beam.Nelem,beam.xx,beam.yy,beam.zz,doBeam,Data::Nt);
-////#endif
+#endif
+#ifdef HAVE_CUDA
+   if (GPUpredict) {
+     precalculate_coherencies_withbeam_gpu(iodata.u,iodata.v,iodata.w,coh,iodata.N,iodata.Nbase*iodata.tilesz,barr,carr,M,iodata.freq0,iodata.deltaf,iodata.deltat,iodata.dec0,Data::min_uvcut,Data::max_uvcut,
+  beam.p_ra0,beam.p_dec0,iodata.freq0,beam.sx,beam.sy,beam.time_utc,iodata.tilesz,beam.Nelem,beam.xx,beam.yy,beam.zz,doBeam,Data::Nt);
+   } else {
+    if (!doBeam) {
+     precalculate_coherencies(iodata.u,iodata.v,iodata.w,coh,iodata.N,iodata.Nbase*iodata.tilesz,barr,carr,M,iodata.freq0,iodata.deltaf,iodata.deltat,iodata.dec0,Data::min_uvcut,Data::max_uvcut,Data::Nt);
+    } else {
+     precalculate_coherencies_withbeam(iodata.u,iodata.v,iodata.w,coh,iodata.N,iodata.Nbase*iodata.tilesz,barr,carr,M,iodata.freq0,iodata.deltaf,iodata.deltat,iodata.dec0,Data::min_uvcut,Data::max_uvcut,
+  beam.p_ra0,beam.p_dec0,iodata.freq0,beam.sx,beam.sy,beam.time_utc,iodata.tilesz,beam.Nelem,beam.xx,beam.yy,beam.zz,Data::Nt);
+    }
+   }
+#endif
 
     
 #ifndef HAVE_CUDA
@@ -648,6 +683,19 @@ main(int argc, char **argv) {
     } else {
      /* since residual is calculated not using x (instead using xo), no need to unwhiten data
         in case x was whitened */
+#ifndef HAVE_CUDA
+     if (!doBeam) {
+      calculate_residuals_multifreq(iodata.u,iodata.v,iodata.w,p,iodata.xo,iodata.N,iodata.Nbase,iodata.tilesz,barr,carr,M,iodata.freqs,iodata.Nchan,iodata.deltaf,iodata.deltat,iodata.dec0,Data::Nt,Data::ccid,Data::rho,Data::phaseOnly);
+     } else {
+      calculate_residuals_multifreq_withbeam(iodata.u,iodata.v,iodata.w,p,iodata.xo,iodata.N,iodata.Nbase,iodata.tilesz,barr,carr,M,iodata.freqs,iodata.Nchan,iodata.deltaf,iodata.deltat,iodata.dec0,
+beam.p_ra0,beam.p_dec0,iodata.freq0,beam.sx,beam.sy,beam.time_utc,beam.Nelem,beam.xx,beam.yy,beam.zz,Data::Nt,Data::ccid,Data::rho,Data::phaseOnly);
+     }
+#endif
+#ifdef HAVE_CUDA
+    if (GPUpredict) {
+      calculate_residuals_multifreq_withbeam_gpu(iodata.u,iodata.v,iodata.w,p,iodata.xo,iodata.N,iodata.Nbase,iodata.tilesz,barr,carr,M,iodata.freqs,iodata.Nchan,iodata.deltaf,iodata.deltat,iodata.dec0,
+beam.p_ra0,beam.p_dec0,iodata.freq0,beam.sx,beam.sy,beam.time_utc,beam.Nelem,beam.xx,beam.yy,beam.zz,doBeam,Data::Nt,Data::ccid,Data::rho,Data::phaseOnly);
+    } else {
      if (!doBeam) {
       calculate_residuals_multifreq(iodata.u,iodata.v,iodata.w,p,iodata.xo,iodata.N,iodata.Nbase,iodata.tilesz,barr,carr,M,iodata.freqs,iodata.Nchan,iodata.deltaf,iodata.deltat,iodata.dec0,Data::Nt,Data::ccid,Data::rho,Data::phaseOnly);
      } else {
@@ -655,33 +703,57 @@ main(int argc, char **argv) {
 beam.p_ra0,beam.p_dec0,iodata.freq0,beam.sx,beam.sy,beam.time_utc,beam.Nelem,beam.xx,beam.yy,beam.zz,Data::Nt,Data::ccid,Data::rho,Data::phaseOnly);
      }
     }
+#endif
+
+    }
     /****************** end calibration **************************/
     /****************** begin diagnostics ************************/
 #ifdef HAVE_CUDA
     if (Data::DoDiag) {
-     calculate_diagnostics(iodata.u,iodata.v,iodata.w,p,iodata.xo,iodata.N,iodata.Nbase,iodata.tilesz,barr,carr,coh,M,Mt,Data::DoDiag,Data::Nt);
+     /* not enabled anymore */
+     //calculate_diagnostics(iodata.u,iodata.v,iodata.w,p,iodata.xo,iodata.N,iodata.Nbase,iodata.tilesz,barr,carr,coh,M,Mt,Data::DoDiag,Data::Nt);
     }
 #endif /* HAVE_CUDA */
     /****************** end diagnostics **************************/
    } else {
     /************ simulation only mode ***************************/
     if (!solfile) {
-////#ifndef HAVE_CUDA
+#ifndef HAVE_CUDA
      if (!doBeam) {
       predict_visibilities_multifreq(iodata.u,iodata.v,iodata.w,iodata.xo,iodata.N,iodata.Nbase,iodata.tilesz,barr,carr,M,iodata.freqs,iodata.Nchan,iodata.deltaf,iodata.deltat,iodata.dec0,Data::Nt,Data::DoSim);
      } else {
       predict_visibilities_multifreq_withbeam(iodata.u,iodata.v,iodata.w,iodata.xo,iodata.N,iodata.Nbase,iodata.tilesz,barr,carr,M,iodata.freqs,iodata.Nchan,iodata.deltaf,iodata.deltat,iodata.dec0,
   beam.p_ra0,beam.p_dec0,iodata.freq0,beam.sx,beam.sy,beam.time_utc,beam.Nelem,beam.xx,beam.yy,beam.zz, Data::Nt,Data::DoSim);
      }
-////#endif
-////#ifdef HAVE_CUDA
-////      predict_visibilities_multifreq_withbeam_gpu(iodata.u,iodata.v,iodata.w,iodata.xo,iodata.N,iodata.Nbase,iodata.tilesz,barr,carr,M,iodata.freqs,iodata.Nchan,iodata.deltaf,iodata.deltat,iodata.dec0,
-////  beam.p_ra0,beam.p_dec0,iodata.freq0,beam.sx,beam.sy,beam.time_utc,beam.Nelem,beam.xx,beam.yy,beam.zz,doBeam,Data::Nt,(Data::DoSim>1?1:0));
-////#endif
+#endif
+#ifdef HAVE_CUDA
+     if (GPUpredict) {
+      predict_visibilities_multifreq_withbeam_gpu(iodata.u,iodata.v,iodata.w,iodata.xo,iodata.N,iodata.Nbase,iodata.tilesz,barr,carr,M,iodata.freqs,iodata.Nchan,iodata.deltaf,iodata.deltat,iodata.dec0,
+  beam.p_ra0,beam.p_dec0,iodata.freq0,beam.sx,beam.sy,beam.time_utc,beam.Nelem,beam.xx,beam.yy,beam.zz,doBeam,Data::Nt,Data::DoSim);
+     } else {
+      if (!doBeam) {
+       predict_visibilities_multifreq(iodata.u,iodata.v,iodata.w,iodata.xo,iodata.N,iodata.Nbase,iodata.tilesz,barr,carr,M,iodata.freqs,iodata.Nchan,iodata.deltaf,iodata.deltat,iodata.dec0,Data::Nt,Data::DoSim);
+      } else {
+       predict_visibilities_multifreq_withbeam(iodata.u,iodata.v,iodata.w,iodata.xo,iodata.N,iodata.Nbase,iodata.tilesz,barr,carr,M,iodata.freqs,iodata.Nchan,iodata.deltaf,iodata.deltat,iodata.dec0,
+       beam.p_ra0,beam.p_dec0,iodata.freq0,beam.sx,beam.sy,beam.time_utc,beam.Nelem,beam.xx,beam.yy,beam.zz, Data::Nt,Data::DoSim);
+      }
+     }
+#endif
     } else {
+     /* if solution file is given, read in the solutions and predict */
      read_solutions(sfp,p,carr,iodata.N,M);
-    /* if solution file is given, read in the solutions and predict */
-    predict_visibilities_multifreq_withsol(iodata.u,iodata.v,iodata.w,p,iodata.xo,ignorelist,iodata.N,iodata.Nbase,iodata.tilesz,barr,carr,M,iodata.freqs,iodata.Nchan,iodata.deltaf,iodata.deltat,iodata.dec0,Data::Nt,Data::DoSim,Data::ccid,Data::rho,Data::phaseOnly);
+
+#ifdef HAVE_CUDA
+     if (GPUpredict) {
+      predict_visibilities_withsol_withbeam_gpu(iodata.u,iodata.v,iodata.w,p,iodata.xo,ignorelist,iodata.N,iodata.Nbase,iodata.tilesz,barr,carr,M,iodata.freqs,iodata.Nchan,iodata.deltaf,iodata.deltat,iodata.dec0,
+beam.p_ra0,beam.p_dec0,iodata.freq0,beam.sx,beam.sy,beam.time_utc,beam.Nelem,beam.xx,beam.yy,beam.zz,doBeam,Data::Nt,Data::DoSim,Data::ccid,Data::rho,Data::phaseOnly);
+     } else {
+      predict_visibilities_multifreq_withsol(iodata.u,iodata.v,iodata.w,p,iodata.xo,ignorelist,iodata.N,iodata.Nbase,iodata.tilesz,barr,carr,M,iodata.freqs,iodata.Nchan,iodata.deltaf,iodata.deltat,iodata.dec0,Data::Nt,Data::DoSim,Data::ccid,Data::rho,Data::phaseOnly);
+     }
+#endif
+#ifndef HAVE_CUDA
+      predict_visibilities_multifreq_withsol(iodata.u,iodata.v,iodata.w,p,iodata.xo,ignorelist,iodata.N,iodata.Nbase,iodata.tilesz,barr,carr,M,iodata.freqs,iodata.Nchan,iodata.deltaf,iodata.deltat,iodata.dec0,Data::Nt,Data::DoSim,Data::ccid,Data::rho,Data::phaseOnly);
+#endif
     }
     /************ end simulation only mode ***************************/
    }
@@ -737,6 +809,18 @@ beam.p_ra0,beam.p_dec0,iodata.freq0,beam.sx,beam.sy,beam.time_utc,beam.Nelem,bea
     } else {
       cout<<"Timeslot: "<<tilex<<", Time spent="<<elapsed_time<<" minutes"<<endl;
     }
+
+#ifdef HAVE_CUDA
+   /* if -E uses a large value ~say 100, at each multiple of this, clear GPU memory */
+   if (GPUpredict>1 && tilex>0 && !(tilex%GPUpredict)) {
+    for (int gpuid=0; gpuid<=MAX_GPU_ID; gpuid++) {
+       cudaSetDevice(gpuid);
+       cudaDeviceReset();
+       cudaDeviceSetLimit(cudaLimitMallocHeapSize, Data::heapsize*1024*1024);
+    }
+   }
+#endif
+
     }
 
 
@@ -827,9 +911,6 @@ beam.p_ra0,beam.p_dec0,iodata.freq0,beam.sx,beam.sy,beam.time_utc,beam.Nelem,bea
   }
   /**********************************************************/
 
-#ifdef HAVE_CUDA
-  cudaDeviceReset();
-#endif
    cout<<"Done."<<endl;    
    return 0;
 }

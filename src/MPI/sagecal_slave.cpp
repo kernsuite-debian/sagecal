@@ -32,7 +32,8 @@
 #include <glob.h>
 
 
-#include<sagecal.h>
+#include <Dirac.h>
+#include <Radio.h>
 #include <mpi.h>
 
 #ifndef LMCUT
@@ -261,7 +262,7 @@ cout<<"Slave "<<myrank<<" has nothing to do"<<endl;
       FILE *sfq;
       if ((sfq=fopen(initsolfile,"r"))==0) {
        fprintf(stderr,"%s: %d: no solution file present\n",__FILE__,__LINE__);
-       return 1;
+       exit(1);
       }
       /* remember to skip first 3 lines from solution file */
       char chr;
@@ -456,6 +457,17 @@ cout<<"Slave "<<myrank<<" has nothing to do"<<endl;
 
     double inv_c=1.0/CONST_C;
 
+#ifdef HAVE_CUDA
+   /* setup Heap of GPU,  only need to be done once, before any kernel is launched  */
+    if (GPUpredict>0) {
+     for (int gpuid=0; gpuid<=MAX_GPU_ID; gpuid++) {
+        cudaSetDevice(gpuid);
+        cudaDeviceSetLimit(cudaLimitMallocHeapSize, Data::heapsize*1024*1024);
+     }
+    }
+#endif
+
+
     while(1) {
      start_time = time(0);
      /* get start/end signal from master */
@@ -537,12 +549,27 @@ cout<<myrank<<" : "<<cm<<": downweight ratio ("<<iodata_vec[cm].fratio<<") based
      }
 
      for(int cm=0; cm<mymscount; cm++) {
+#ifndef HAVE_CUDA
       if (!doBeam) {
        precalculate_coherencies(iodata_vec[cm].u,iodata_vec[cm].v,iodata_vec[cm].w,coh_vec[cm],iodata_vec[cm].N,iodata_vec[cm].Nbase*iodata_vec[cm].tilesz,barr_vec[cm],carr_vec[cm],M,iodata_vec[cm].freq0,iodata_vec[cm].deltaf,iodata_vec[cm].deltat,iodata_vec[cm].dec0,Data::min_uvcut,Data::max_uvcut,Data::Nt);
       } else {
        precalculate_coherencies_withbeam(iodata_vec[cm].u,iodata_vec[cm].v,iodata_vec[cm].w,coh_vec[cm],iodata_vec[cm].N,iodata_vec[cm].Nbase*iodata_vec[cm].tilesz,barr_vec[cm],carr_vec[cm],M,iodata_vec[cm].freq0,iodata_vec[cm].deltaf,iodata_vec[cm].deltat,iodata_vec[cm].dec0,Data::min_uvcut,Data::max_uvcut,
         beam_vec[cm].p_ra0,beam_vec[cm].p_dec0,iodata_vec[cm].freq0,beam_vec[cm].sx,beam_vec[cm].sy,beam_vec[cm].time_utc,iodata_vec[cm].tilesz,beam_vec[cm].Nelem,beam_vec[cm].xx,beam_vec[cm].yy,beam_vec[cm].zz,Data::Nt);
       }
+#endif
+#ifdef HAVE_CUDA
+     if (GPUpredict) {
+       precalculate_coherencies_withbeam_gpu(iodata_vec[cm].u,iodata_vec[cm].v,iodata_vec[cm].w,coh_vec[cm],iodata_vec[cm].N,iodata_vec[cm].Nbase*iodata_vec[cm].tilesz,barr_vec[cm],carr_vec[cm],M,iodata_vec[cm].freq0,iodata_vec[cm].deltaf,iodata_vec[cm].deltat,iodata_vec[cm].dec0,Data::min_uvcut,Data::max_uvcut,
+  beam_vec[cm].p_ra0,beam_vec[cm].p_dec0,iodata_vec[cm].freq0,beam_vec[cm].sx,beam_vec[cm].sy,beam_vec[cm].time_utc,iodata_vec[cm].tilesz,beam_vec[cm].Nelem,beam_vec[cm].xx,beam_vec[cm].yy,beam_vec[cm].zz,doBeam,Data::Nt);
+     } else {
+      if (!doBeam) {
+       precalculate_coherencies(iodata_vec[cm].u,iodata_vec[cm].v,iodata_vec[cm].w,coh_vec[cm],iodata_vec[cm].N,iodata_vec[cm].Nbase*iodata_vec[cm].tilesz,barr_vec[cm],carr_vec[cm],M,iodata_vec[cm].freq0,iodata_vec[cm].deltaf,iodata_vec[cm].deltat,iodata_vec[cm].dec0,Data::min_uvcut,Data::max_uvcut,Data::Nt);
+      } else {
+       precalculate_coherencies_withbeam(iodata_vec[cm].u,iodata_vec[cm].v,iodata_vec[cm].w,coh_vec[cm],iodata_vec[cm].N,iodata_vec[cm].Nbase*iodata_vec[cm].tilesz,barr_vec[cm],carr_vec[cm],M,iodata_vec[cm].freq0,iodata_vec[cm].deltaf,iodata_vec[cm].deltat,iodata_vec[cm].dec0,Data::min_uvcut,Data::max_uvcut,
+        beam_vec[cm].p_ra0,beam_vec[cm].p_dec0,iodata_vec[cm].freq0,beam_vec[cm].sx,beam_vec[cm].sy,beam_vec[cm].time_utc,iodata_vec[cm].tilesz,beam_vec[cm].Nelem,beam_vec[cm].xx,beam_vec[cm].yy,beam_vec[cm].zz,Data::Nt);
+      }
+     }
+#endif
      }
  
      /******************** ADMM  *******************************/
@@ -734,12 +761,27 @@ cout<<myrank<<" : "<<cm<<": downweight ratio ("<<iodata_vec[cm].fratio<<") based
 
      /* write residuals to output */
      for(int cm=0; cm<mymscount; cm++) {
+#ifndef HAVE_CUDA
       if (!doBeam) {
-      calculate_residuals_multifreq(iodata_vec[cm].u,iodata_vec[cm].v,iodata_vec[cm].w,p_vec[cm],iodata_vec[cm].xo,iodata_vec[cm].N,iodata_vec[cm].Nbase,iodata_vec[cm].tilesz,barr_vec[cm],carr_vec[cm],M,iodata_vec[cm].freqs,iodata_vec[cm].Nchan,iodata_vec[cm].deltaf,iodata_vec[cm].deltat,iodata_vec[cm].dec0,Data::Nt,Data::ccid,Data::rho,Data::phaseOnly);
-     } else {
-      calculate_residuals_multifreq_withbeam(iodata_vec[cm].u,iodata_vec[cm].v,iodata_vec[cm].w,p_vec[cm],iodata_vec[cm].xo,iodata_vec[cm].N,iodata_vec[cm].Nbase,iodata_vec[cm].tilesz,barr_vec[cm],carr_vec[cm],M,iodata_vec[cm].freqs,iodata_vec[cm].Nchan,iodata_vec[cm].deltaf,iodata_vec[cm].deltat,iodata_vec[cm].dec0,
+       calculate_residuals_multifreq(iodata_vec[cm].u,iodata_vec[cm].v,iodata_vec[cm].w,p_vec[cm],iodata_vec[cm].xo,iodata_vec[cm].N,iodata_vec[cm].Nbase,iodata_vec[cm].tilesz,barr_vec[cm],carr_vec[cm],M,iodata_vec[cm].freqs,iodata_vec[cm].Nchan,iodata_vec[cm].deltaf,iodata_vec[cm].deltat,iodata_vec[cm].dec0,Data::Nt,Data::ccid,Data::rho,Data::phaseOnly);
+      } else {
+       calculate_residuals_multifreq_withbeam(iodata_vec[cm].u,iodata_vec[cm].v,iodata_vec[cm].w,p_vec[cm],iodata_vec[cm].xo,iodata_vec[cm].N,iodata_vec[cm].Nbase,iodata_vec[cm].tilesz,barr_vec[cm],carr_vec[cm],M,iodata_vec[cm].freqs,iodata_vec[cm].Nchan,iodata_vec[cm].deltaf,iodata_vec[cm].deltat,iodata_vec[cm].dec0,
        beam_vec[cm].p_ra0,beam_vec[cm].p_dec0,iodata_vec[cm].freq0,beam_vec[cm].sx,beam_vec[cm].sy,beam_vec[cm].time_utc,beam_vec[cm].Nelem,beam_vec[cm].xx,beam_vec[cm].yy,beam_vec[cm].zz,Data::Nt,Data::ccid,Data::rho,Data::phaseOnly);
+      }
+#endif
+#ifdef HAVE_CUDA
+     if (GPUpredict) {
+       calculate_residuals_multifreq_withbeam_gpu(iodata_vec[cm].u,iodata_vec[cm].v,iodata_vec[cm].w,p_vec[cm],iodata_vec[cm].xo,iodata_vec[cm].N,iodata_vec[cm].Nbase,iodata_vec[cm].tilesz,barr_vec[cm],carr_vec[cm],M,iodata_vec[cm].freqs,iodata_vec[cm].Nchan,iodata_vec[cm].deltaf,iodata_vec[cm].deltat,iodata_vec[cm].dec0,
+          beam_vec[cm].p_ra0,beam_vec[cm].p_dec0,iodata_vec[cm].freq0,beam_vec[cm].sx,beam_vec[cm].sy,beam_vec[cm].time_utc,beam_vec[cm].Nelem,beam_vec[cm].xx,beam_vec[cm].yy,beam_vec[cm].zz,doBeam,Data::Nt,Data::ccid,Data::rho,Data::phaseOnly);
+     } else {
+      if (!doBeam) {
+       calculate_residuals_multifreq(iodata_vec[cm].u,iodata_vec[cm].v,iodata_vec[cm].w,p_vec[cm],iodata_vec[cm].xo,iodata_vec[cm].N,iodata_vec[cm].Nbase,iodata_vec[cm].tilesz,barr_vec[cm],carr_vec[cm],M,iodata_vec[cm].freqs,iodata_vec[cm].Nchan,iodata_vec[cm].deltaf,iodata_vec[cm].deltat,iodata_vec[cm].dec0,Data::Nt,Data::ccid,Data::rho,Data::phaseOnly);
+      } else {
+       calculate_residuals_multifreq_withbeam(iodata_vec[cm].u,iodata_vec[cm].v,iodata_vec[cm].w,p_vec[cm],iodata_vec[cm].xo,iodata_vec[cm].N,iodata_vec[cm].Nbase,iodata_vec[cm].tilesz,barr_vec[cm],carr_vec[cm],M,iodata_vec[cm].freqs,iodata_vec[cm].Nchan,iodata_vec[cm].deltaf,iodata_vec[cm].deltat,iodata_vec[cm].dec0,
+       beam_vec[cm].p_ra0,beam_vec[cm].p_dec0,iodata_vec[cm].freq0,beam_vec[cm].sx,beam_vec[cm].sy,beam_vec[cm].time_utc,beam_vec[cm].Nelem,beam_vec[cm].xx,beam_vec[cm].yy,beam_vec[cm].zz,Data::Nt,Data::ccid,Data::rho,Data::phaseOnly);
+      }
      }
+#endif
      }
      tilex+=iodata_vec[0].tilesz;
 
@@ -798,6 +840,17 @@ cout<<myrank<<" : "<<cm<<": downweight ratio ("<<iodata_vec[cm].fratio<<") based
       cout<<myrank<< ": Timeslot: "<<tilex<<" residual MS "<<cm<<": initial="<<res_00[cm]<<"/"<<res_0vec[cm]<<",final="<<res_01[cm]<<"/"<<res_1vec[cm]<<", Time spent="<<elapsed_time<<" minutes"<<endl;
      }
     }
+
+#ifdef HAVE_CUDA
+   /* if -E uses a large value ~say 100, at each multiple of this, clear GPU memory */
+   if (GPUpredict>1 && tilex>0 && !(tilex%GPUpredict)) {
+    for (int gpuid=0; gpuid<=MAX_GPU_ID; gpuid++) {
+       cudaSetDevice(gpuid);
+       cudaDeviceReset();
+       cudaDeviceSetLimit(cudaLimitMallocHeapSize, Data::heapsize*1024*1024);
+    }
+   }
+#endif
 
      /* now send to master signal that we are ready for next data chunk */
      if (start_iter==1) {

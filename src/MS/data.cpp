@@ -18,18 +18,19 @@
  */
 
 #include "data.h"
-#include "sagecal.h"
-#include <measures/Measures/MDirection.h>
-#include <measures/Measures/UVWMachine.h>
-#include <casa/Quanta.h>
-#include <casa/Quanta/Quantum.h>
+#include "Radio.h"
+#include "Dirac.h"
+#include <casacore/measures/Measures/MDirection.h>
+#include <casacore/measures/Measures/UVWMachine.h>
+#include <casacore/casa/Quanta.h>
+#include <casacore/casa/Quanta/Quantum.h>
 
 /* speed of light */
 #ifndef CONST_C
 #define CONST_C 299792458.0
 #endif
 
-using namespace casa;
+using namespace casacore;
 
 int Data::numChannels=1;
 unsigned long int Data::numRows;
@@ -85,6 +86,14 @@ int Data::Nmaxtime=0;
 int Data::Nskip=0;
 int Data::verbose=0; /* no verbose output */
 int Data::mdl=0; /* no AIC/MDL calculation by default */
+int Data::GPUpredict=0; /* use CPU for model calculation, if GPU not specified */
+#ifdef HAVE_CUDA
+int Data::heapsize=GPU_HEAP_SIZE; /* heap size in GPU (MB) to be used in malloc() */
+#endif
+
+int Data::servermode=-1; /* by default, no client-server mode */
+char *Data::servername=NULL;
+char *Data::portnumber=NULL; 
 
 using namespace Data;
 
@@ -139,6 +148,7 @@ Data::readAuxData(const char *fname, Data::IOData *data) {
     data->Nchan=chan_freq.shape(0)[0];
     data->Nms=1;
    /* allocate memory */
+   try { 
    data->u=new double[data->Nbase*data->tilesz];
    data->v=new double[data->Nbase*data->tilesz];
    data->w=new double[data->Nbase*data->tilesz];
@@ -147,6 +157,10 @@ Data::readAuxData(const char *fname, Data::IOData *data) {
    data->freqs=new double[data->Nchan];
    data->flag=new double[data->Nbase*data->tilesz];
    data->NchanMS=new int[data->Nms];
+   } catch (const std::bad_alloc& e) {
+     cout<<"Allocating memory for data failed. Quitting."<< e.what() << endl;
+     exit(1);
+   }
    data->NchanMS[0]=data->Nchan;
 
    /* copy freq */
@@ -190,6 +204,7 @@ Data::readAuxData(const char *fname, Data::IOData *data, Data::LBeam *binfo) {
     data->Nchan=chan_freq.shape(0)[0];
     data->Nms=1;
    /* allocate memory */
+   try {
    data->u=new double[data->Nbase*data->tilesz];
    data->v=new double[data->Nbase*data->tilesz];
    data->w=new double[data->Nbase*data->tilesz];
@@ -198,6 +213,10 @@ Data::readAuxData(const char *fname, Data::IOData *data, Data::LBeam *binfo) {
    data->freqs=new double[data->Nchan];
    data->flag=new double[data->Nbase*data->tilesz];
    data->NchanMS=new int[data->Nms];
+   } catch (const std::bad_alloc& e) {
+     cout<<"Allocating memory for data failed. Quitting."<< e.what() << endl;
+     exit(1);
+   }
    data->NchanMS[0]=data->Nchan;
 
    /* copy freq */
@@ -224,7 +243,14 @@ Data::readAuxData(const char *fname, Data::IOData *data, Data::LBeam *binfo) {
    binfo->yy=new double*[data->N];
    binfo->zz=new double*[data->N];
 
-   Table antfield = Table(_t.keywordSet().asTable("LOFAR_ANTENNA_FIELD"));
+   Table antfield;
+   if(_t.keywordSet().fieldNumber("LOFAR_ANTENNA_FIELD") != -1) {
+    antfield = Table(_t.keywordSet().asTable("LOFAR_ANTENNA_FIELD"));
+   } else {
+    char buff[2048]={0};
+    sprintf(buff, "%s/LOFAR_ANTENNA_FIELD", fname);
+    antfield=Table(buff);
+   }
    ROArrayColumn<double> position(antfield, "POSITION"); 
    ROArrayColumn<double> offset(antfield, "ELEMENT_OFFSET"); 
    ROArrayColumn<double> coord(antfield, "COORDINATE_AXES"); 
@@ -520,7 +546,7 @@ Data::readAuxDataList(vector<string> msnames, Data::IOData *data) {
 /* each time this is called read in data from MS, and format them as
   u,v,w: u,v,w coordinates (wavelengths) size Nbase*tilesz x 1 
   u,v,w are ordered with baselines, timeslots
-  x: data to write size Nbase*8*tileze x 1
+  x: data to write size Nbase*8*tilesz x 1
   ordered by XX(re,im),XY(re,im),YX(re,im), YY(re,im), baseline, timeslots
   fratio: flagged data as a ratio to all available data
 */
@@ -542,8 +568,8 @@ Data::loadData(Table ti, Data::IOData iodata, double *fratio) {
 
     /* check we get correct rows */
     int nrow=t.nrow();
-    if(nrow-iodata.N*iodata.tilesz>iodata.tilesz*iodata.Nbase) {
-      cout<<"Error in rows"<<endl;
+    if(nrow<iodata.tilesz*iodata.Nbase-iodata.tilesz*iodata.N) {
+      cout<<"Warning: Missing rows, got "<<nrow<<" expect "<<iodata.tilesz*iodata.Nbase<<" +- "<<iodata.tilesz*iodata.N<<". (probably the last time interval, so not a big issue)."<<endl;
     }
     int row0=0;
     /* tapering */
@@ -556,7 +582,7 @@ Data::loadData(Table ti, Data::IOData iodata, double *fratio) {
     }
     /* counters for finding flagged data ratio */
     int countgood=0; int countbad=0;
-    for(int row = 0; row < nrow; row++) {
+    for(int row = 0; row < nrow && row0<iodata.tilesz*iodata.Nbase; row++) {
         uInt i = a1(row); //antenna1 
         uInt j = a2(row); //antenna2
         /* only work with cross correlations */
@@ -649,6 +675,16 @@ Data::loadData(Table ti, Data::IOData iodata, double *fratio) {
     if (row0<iodata.tilesz*iodata.Nbase) {
       for(int row = row0; row<iodata.tilesz*iodata.Nbase; row++) {
         iodata.flag[row]=1;
+
+      }
+      /* set uvw and data to 0 to eliminate any funny business */
+      memset(&iodata.u[row0],0,sizeof(double)*(size_t)(iodata.tilesz*iodata.Nbase-row0));
+      memset(&iodata.v[row0],0,sizeof(double)*(size_t)(iodata.tilesz*iodata.Nbase-row0));
+      memset(&iodata.w[row0],0,sizeof(double)*(size_t)(iodata.tilesz*iodata.Nbase-row0));
+      memset(&iodata.x[8*row0],0,sizeof(double)*(size_t)8*(iodata.tilesz*iodata.Nbase-row0));
+
+      for(int k = 0; k < iodata.Nchan; k++) {
+       memset(&iodata.xo[iodata.Nbase*iodata.tilesz*8*k+row0*8],0,sizeof(double)*(size_t)8*(iodata.tilesz*iodata.Nbase-row0));
       }
     }
     /* flagged data / total usable data, not counting excluded baselines */
@@ -687,8 +723,8 @@ Data::loadData(Table ti, Data::IOData iodata, LBeam binfo, double *fratio) {
 
     /* check we get correct rows */
     int nrow=t.nrow();
-    if(nrow-iodata.N*iodata.tilesz>iodata.tilesz*iodata.Nbase) {
-      cout<<"Error in rows"<<endl;
+    if(nrow<iodata.tilesz*iodata.Nbase-iodata.tilesz*iodata.N) {
+      cout<<"Warning: Missing rows, got "<<nrow<<" expect "<<iodata.tilesz*iodata.Nbase<<" +- "<<iodata.tilesz*iodata.N<<". (probably the last time interval, so not a big issue)."<<endl;
     }
     int row0=0;
     int rowt=0;
@@ -702,13 +738,11 @@ Data::loadData(Table ti, Data::IOData iodata, LBeam binfo, double *fratio) {
     }
     /* counters for finding flagged data ratio */
     int countgood=0; int countbad=0;
-    for(int row = 0; row < nrow; row++) {
+    for(int row = 0; row < nrow && row0<iodata.tilesz*iodata.Nbase; row++) {
         uInt i = a1(row); //antenna1 
         uInt j = a2(row); //antenna2
         if (!i && !j) {/* use baseline 0-0 to extract time */
          double tt=tut(row);
-//cout.precision(22);
-//cout<<"("<<i<<","<<j<<") "<<rowt<<"="<<tt<<endl;
          /* convert MJD (s) to JD (days) */
          binfo.time_utc[rowt++]=(tt/86400.0+2400000.5); /* no +0.5 added */
         }
@@ -802,6 +836,16 @@ Data::loadData(Table ti, Data::IOData iodata, LBeam binfo, double *fratio) {
     if (row0<iodata.tilesz*iodata.Nbase) {
       for(int row = row0; row<iodata.tilesz*iodata.Nbase; row++) {
         iodata.flag[row]=1;
+
+      }
+      /* set uvw and data to 0 to eliminate any funny business */
+      memset(&iodata.u[row0],0,sizeof(double)*(size_t)(iodata.tilesz*iodata.Nbase-row0));
+      memset(&iodata.v[row0],0,sizeof(double)*(size_t)(iodata.tilesz*iodata.Nbase-row0));
+      memset(&iodata.w[row0],0,sizeof(double)*(size_t)(iodata.tilesz*iodata.Nbase-row0));
+      memset(&iodata.x[8*row0],0,sizeof(double)*(size_t)8*(iodata.tilesz*iodata.Nbase-row0));
+
+      for(int k = 0; k < iodata.Nchan; k++) {
+       memset(&iodata.xo[iodata.Nbase*iodata.tilesz*8*k+row0*8],0,sizeof(double)*(size_t)8*(iodata.tilesz*iodata.Nbase-row0));
       }
     }
     /* flagged data / total usable data, not counting excluded baselines */
@@ -991,7 +1035,7 @@ Data::writeData(Table ti, Data::IOData iodata) {
     /* check we get correct rows */
     int nrow=t.nrow();
     if(nrow-iodata.N*iodata.tilesz>iodata.tilesz*iodata.Nbase) {
-      cout<<"Error in rows"<<endl;
+      cout<<"Warning: Missing rows, got "<<nrow<<" expect "<<iodata.tilesz*iodata.Nbase<<" +- "<<iodata.tilesz*iodata.N<<". (probably the last time interval, so not a big issue)."<<endl;
     }
     //cout<<"Table rows "<<nrow<<" Data rows "<<iodata.tilesz*iodata.Nbase+iodata.tilesz*iodata.N<<endl;
     int row0=0;
