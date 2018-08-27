@@ -3,14 +3,15 @@ Section: science
 Priority: optional
 Maintainer: KERN packaging <packaging@kernsuite.info>
 Build-Depends: debhelper (>= 9.0.0),
+ cmake,
  liblapack-dev,
  casacore-dev,
  libglib2.0-dev,
  gfortran,
  libcfitsio-dev | libcfitsio3-dev,
  libopenblas-dev,
- wcslib-dev,
- nvidia-cuda-toolkit
+ wcslib-dev
+# nvidia-cuda-toolkit
 Standards-Version: 4.1.4
 Homepage: https://sourceforge.net/projects/sagecal/
 
