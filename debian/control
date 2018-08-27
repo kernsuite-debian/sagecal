@@ -8,7 +8,9 @@ Build-Depends: debhelper (>= 9.0.0),
  libglib2.0-dev,
  gfortran,
  libcfitsio-dev | libcfitsio3-dev,
- libopenblas-dev
+ libopenblas-dev,
+ wcslib-dev,
+ nvidia-cuda-toolkit
 Standards-Version: 4.1.4
 Homepage: https://sourceforge.net/projects/sagecal/
 

@@ -1,2 +1,5 @@
 .debhelper/
-
+files
+*.debhelper.log
+*.substvars
+sagecal/
