@@ -1,3 +1,10 @@
+sagecal (0.5.0+git20181010.56e7526-1) bionic; urgency=medium
+
+  [ Gijs Molenaar ]
+  * New upstream version 0.5.0+git20181010.56e7526
+
+ -- KERN packaging <packaging@kernsuite.info>  Wed, 07 Nov 2018 17:52:09 +0100
+
 sagecal (0.5.0+git20180828.a604fd6-1) bionic; urgency=medium
 
   [ Gijs Molenaar ]
