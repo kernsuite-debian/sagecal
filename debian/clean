@@ -1,0 +1,4 @@
+src/MS/*.o
+src/MS/sagecal
+src/lib/*.o
+src/lib/*.a
