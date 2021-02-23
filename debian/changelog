@@ -1,3 +1,11 @@
+sagecal (0.5.0+git20201227.6be5363-1kern1) focal; urgency=medium
+
+  [ Athanaseus Javas Ramaila ]
+  * New upstream version 0.5.0+git20201227.6be5363
+  * BUild for focal
+
+ -- KERN packaging <packaging@kernsuite.info>  Tue, 23 Feb 2021 15:15:28 +0000
+
 sagecal (0.5.0+git20181010.56e7526-1) bionic; urgency=medium
 
   [ Gijs Molenaar ]
