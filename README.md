@@ -12,7 +12,7 @@
 
 ## Features
 
-- Levenberg-Marquardt, LBFGS, Riemannian Trust Region, Nesterov's accelerated gradient descent algorithms
+- Levenberg-Marquardt, (stochastic) LBFGS, Riemannian Trust Region, Nesterov's accelerated gradient descent algorithms
 - GPU acceleration using CUDA
 - Fast and accurate interferometric calibration
 - Gaussian and Student's t noise models
@@ -21,10 +21,15 @@
 - Distributed calibration using MPI - consensus optimization with data multiplexing
 - Tools to build sky models and restore sky models to images
 - Adaptive update of ADMM penalty (Barzilai-Borwein a.k.a. Spectral method)
+- Bandpass calibration and unprecedented RFI mitigation with stochastic LBFGS
+- Stochastic calibration for handling data at highest resolution (with federated averaging and consensus optimization)
 
 
-Read INSTALL for installation. This file gives a brief guide to use SAGECal.
-Warning: this file may be obsolete. use sagecal -h to see up-to-date options.
+Please read INSTALL.md for installation instructions, but 'cmake' should work in most cases. We give a brief guide to use SAGECal here but there is extensive documentation here.
+
+## Contributing
+Read the [contributing guide](https://github.com/nlesc-dirac/sagecal/blob/master/CONTRIBUTING.md)
+
 
 ## Code documentation
 Code documentation can be found [here](https://codedocs.xyz/nlesc-dirac/sagecal).
@@ -114,13 +119,13 @@ sagecal -d my_data.MS -s my_skymodel -c my_clustering -n no.of.threads -t 60 -p 
 Use your solution interval (-t 60) so that its big enough to get a decent solution and not too big to make the parameters vary too much. (about 20 minutes per solution is reasonable).
 
 Note: It is also possible to calibrate more than one MS together. See section 4 below.
-Note: To fully use GPU acceleration use -E 1 option.
+Note: To fully use GPU acceleration use ```-E 1``` option.
 
 Simulations:
-With -a 1, only a simulation of the sky model is done.
-With -a 1 and -p 'solutions_file', simulation is done with the sky model corrupted with solutions in 'solutions_file'.
-With -a 1 and -p 'solutions_file' and -z 'ignore_file', simulation is done with the solutions in the 'solutions_file', but ignoring the cluster ids in the 'ignore_file'.
-Eg. If you need to ignore cluster ids '-1', '10', '999', create a text file :
+With ```-a 1```, only a simulation of the sky model is done.
+With ```-a 1``` and ```-p``` 'solutions_file', simulation is done with the sky model corrupted with solutions in 'solutions_file'.
+With ```-a 1``` and ```-p``` 'solutions_file' and ```-z``` 'ignore_file', simulation is done with the solutions in the 'solutions_file', but ignoring the cluster ids in the 'ignore_file'.
+E.g., If you need to ignore cluster ids '-1', '10', '999', create a text file :
 
 ```
 -1
@@ -129,6 +134,9 @@ Eg. If you need to ignore cluster ids '-1', '10', '999', create a text file :
 ```
 
 and use it as the 'ignore_file'.
+
+Bandpass correction using **stochastic** calibration with consensus:
+Use ```-N 1``` combined with options for ```-M```,```-w``` (see also section 4 below).
 
 
 ### 4) Distributed calibration
@@ -142,7 +150,7 @@ Use mpirun to run sagecal-mpi, example:
 ```
 
 Specific options : 
-```-np 11``` : 11 processes : starts 10 slaves + 1 master
+```-np 11``` : 11 processes : starts 10 workers + 1 master
 
 ```./machines``` : will list the host names of the 11 (or fewer) nodes used ( 1st name is the master ) : normally the node where you invoke mpirun
 
@@ -158,13 +166,17 @@ Specific options :
 
 ```-G textfile```: each cluster can have a different regularization factor, instead of using ```-r``` option when the regularization is the same for all clusters.
 
+```-N 1```: enable **stochastic** calibration (minibatches of data), combined with options ```-M```, ```-w``` and ```-u```.
+
+```-U 1```: use global solution instead of local solution for residual calculation.
+
 MPI specific options:
 
 ```/scratch/users/sarod``` : this is where MPI stores temp files (default is probably ```/tmp```).
 
 ```--mca*```: various options to tune the networking and scheduling.
 
-Note: the number of slaves (-np option) can be lower than the number of MS calibrated. The program will divide the workload among the number of available slaves.
+Note: the number of workers (-np option) can be lower than the number of MS calibrated. The program will divide the workload among the number of available workers.
 
 
 The rest of the options are similar to sagecal.
@@ -187,7 +199,5 @@ So for this cluster, there will be more than 1 column in the solution file, the 
 
 
 ### Additional Info
-See [LOFAR Cookbook Chapter](https://support.astron.nl/LOFARImagingCookbook/sagecal.html).
-
-Please cite this code using the DOI.
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.1289316.svg)](https://doi.org/10.5281/zenodo.1289316)
+See a [Tutorial](http://sagecal.sourceforge.net/tutorial/html/index.html)
+and the [LOFAR Cookbook Chapter](https://support.astron.nl/LOFARImagingCookbook/sagecal.html).
